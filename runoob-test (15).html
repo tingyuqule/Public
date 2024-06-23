@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xie & Sang</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f0f0; }
+        #app { display: flex; max-width: 1200px; margin: 0 auto; }
+        #left-panel { flex: 1; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); margin-right: 20px; }
+        #map-container { flex: 1; }
+        h1, h2 { color: #333; }
+        .trip { margin-bottom: 20px; padding: 15px; border-radius: 5px; background-color: #f9f9f9; }
+        .item { margin-bottom: 15px; padding: 15px; border-radius: 5px; background-color: #e9e9e9; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .item-details { display: none; }
+        input, textarea { width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background-color: #4CAF50; color: white; border: none; padding: 10px 15px; margin-right: 10px; cursor: pointer; border-radius: 4px; }
+        button:hover { background-color: #45a049; }
+        #map { height: 100vh; border-radius: 8px; overflow: hidden; }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div id="left-panel">
+            <h1>Xie & Sang </h1>
+            <div id="trips"></div>
+            <button onclick="addTrip()">添加新的旅行</button>
+        </div>
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script>
+        let trips = [];
+        let map = L.map('map').setView([39.9042, 116.4074], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let markers = [];
+        let routingControl;
+        
+        function addTrip() {
+            let trip = {
+                name: '新的旅行',
+                items: []
+            };
+            trips.push(trip);
+            renderTrips();
+        }
+        
+        function addItem(tripIndex) {
+            let item = {
+                location: '',
+                dateTime: '',
+                itinerary: '',
+                isExpanded: true,
+                lat: null,
+                lng: null
+            };
+            trips[tripIndex].items.push(item);
+            renderTrips();
+        }
+        
+        function renderTrips() {
+            let tripsContainer = document.getElementById('trips');
+            tripsContainer.innerHTML = '';
+            trips.forEach((trip, tripIndex) => {
+                let tripElement = document.createElement('div');
+                tripElement.className = 'trip';
+                tripElement.innerHTML = `
+                    <h2>
+                        <input type="text" value="${trip.name}" onchange="updateTripName(${tripIndex}, this.value)">
+                        <button onclick="removeTrip(${tripIndex})">删除旅行</button>
+                    </h2>
+                    <div id="tripItems${tripIndex}"></div>
+                    <button onclick="addItem(${tripIndex})">添加行程项目</button>
+                    <button onclick="shareTrip(${tripIndex})">分享旅行</button>
+                `;
+                tripsContainer.appendChild(tripElement);
+        
+                let tripItemsContainer = document.getElementById(`tripItems${tripIndex}`);
+                trip.items.forEach((item, itemIndex) => {
+                    let itemElement = document.createElement('div');
+                    itemElement.className = 'item';
+                    itemElement.innerHTML = `
+                        <div class="item-header">
+                            <span>${itemIndex + 1}. ${item.location || '未命名地点'}</span>
+                            <div>
+                                <button onclick="toggleItem(${tripIndex}, ${itemIndex})">${item.isExpanded ? '完成' : '展开/编辑'}</button>
+                                <button onclick="removeItem(${tripIndex}, ${itemIndex})">删除</button>
+                            </div>
+                        </div>
+                        <div class="item-details" style="display: ${item.isExpanded ? 'block' : 'none'}">
+                            <input type="text" placeholder="地点" value="${item.location}" onchange="updateItem(${tripIndex}, ${itemIndex}, 'location', this.value)">
+                            <input type="datetime-local" value="${item.dateTime}" onchange="updateItem(${tripIndex}, ${itemIndex}, 'dateTime', this.value)">
+                            <textarea placeholder="行程安排" onchange="updateItem(${tripIndex}, ${itemIndex}, 'itinerary', this.value)">${item.itinerary}</textarea>
+                        </div>
+                    `;
+                    tripItemsContainer.appendChild(itemElement);
+                });
+            });
+            updateMap();
+        }
+        
+        function updateTripName(tripIndex, newName) {
+            trips[tripIndex].name = newName;
+            updateMap();
+        }
+        
+        function removeTrip(tripIndex) {
+            trips.splice(tripIndex, 1);
+            renderTrips();
+        }
+        
+        function updateItem(tripIndex, itemIndex, field, value) {
+            trips[tripIndex].items[itemIndex][field] = value;
+            if (field === 'location') {
+                // 这里应该使用地理编码服务来获取真实坐标
+                trips[tripIndex].items[itemIndex].lat = 39.9042 + (Math.random() - 0.5) * 0.1;
+                trips[tripIndex].items[itemIndex].lng = 116.4074 + (Math.random() - 0.5) * 0.1;
+            }
+            updateMap();
+        }
+        
+        function removeItem(tripIndex, itemIndex) {
+            trips[tripIndex].items.splice(itemIndex, 1);
+            renderTrips();
+        }
+        
+        function toggleItem(tripIndex, itemIndex) {
+            trips[tripIndex].items[itemIndex].isExpanded = !trips[tripIndex].items[itemIndex].isExpanded;
+            renderTrips();
+        }
+        
+        function updateMap() {
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+        
+            let allWaypoints = [];
+            trips.forEach(trip => {
+                trip.items.forEach((item, index) => {
+                    if (item.location && item.lat && item.lng) {
+                        let marker = L.marker([item.lat, item.lng]).addTo(map);
+                        marker.bindPopup(`${trip.name}: ${index + 1}. ${item.location}<br>${item.dateTime}`);
+                        markers.push(marker);
+                        allWaypoints.push(L.latLng(item.lat, item.lng));
+                    }
+                });
+            });
+        
+            if (allWaypoints.length >= 2) {
+                routingControl = L.Routing.control({
+                    waypoints: allWaypoints,
+                    routeWhileDragging: true,
+                    lineOptions: {
+                        styles: [{color: 'blue', opacity: 0.6, weight: 4}]
+                    }
+                }).addTo(map);
+            }
+        
+            if (allWaypoints.length > 0) {
+                map.fitBounds(L.latLngBounds(allWaypoints));
+            }
+        }
+        
+        function shareTrip(tripIndex) {
+            let trip = trips[tripIndex];
+            let shareText = `旅行名称: ${trip.name}\n\n行程:\n`;
+            trip.items.forEach((item, index) => {
+                shareText += `${index + 1}. ${item.location || '未命名地点'} - ${item.dateTime}\n`;
+                shareText += `   行程安排: ${item.itinerary}\n\n`;
+            });
+            
+            let personalNote = prompt("请添加您的个人评论或备注：");
+            if (personalNote) {
+                shareText += `\n个人评论/备注:\n${personalNote}`;
+            }
+            
+            alert('以下是您的旅行行程详情:\n\n' + shareText);
+        }
+        
+        // 初始化
+        renderTrips();
+    </script>
+</body>
+
+</html>
